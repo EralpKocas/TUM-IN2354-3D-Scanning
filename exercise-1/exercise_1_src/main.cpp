@@ -74,18 +74,16 @@ bool WriteMesh(Vertex* vertices, unsigned int width, unsigned int height, const 
 
     for(int i=0; i < nVertices; i++){
         if (i != nVertices - 1 and vertices[i].position.x() != MINF){
-            if (i % 639 == 0 or i >= nVertices - width) continue;
+            if (i % width == width-1 or i >= nVertices - width) continue;
 
             int corner_2 = i + width;
             int corner_3 = i + 1;
-            //bool distTrue = isDistValid(vertices[corner_2], vertices[corner_3], edgeThreshold);
             bool distTrue = isDistValid(vertices[i], vertices[corner_2], vertices[corner_3], edgeThreshold);
             if (vertices[corner_2].position.x() != MINF and vertices[corner_3].position.x() != MINF and distTrue){
                 nFaces++;
             } else continue;
 
             int corner_4 = corner_2 + 1;
-            //added later, not used in first draft distance
             distTrue = isDistValid(vertices[corner_2], vertices[corner_3], vertices[corner_4], edgeThreshold);
             if (vertices[corner_4].position.x() != MINF and distTrue)
                 nFaces++;
@@ -122,11 +120,10 @@ bool WriteMesh(Vertex* vertices, unsigned int width, unsigned int height, const 
 
     for(int i=0; i < nVertices; i++){
         if (i != nVertices - 1 and vertices[i].position.x() != MINF){
-            if (i % 639 == 0 or i >= nVertices - width) continue;
+            if (i % width == width-1 or i >= nVertices - width) continue;
 
             int corner_2 = i + width;
             int corner_3 = i + 1;
-            //bool distTrue = isDistValid(vertices[corner_2], vertices[corner_3], edgeThreshold);
             bool distTrue = isDistValid(vertices[i], vertices[corner_2], vertices[corner_3], edgeThreshold);
             if (vertices[corner_2].position.x() != MINF and vertices[corner_3].position.x() != MINF and distTrue){
                 outFile << "3 " << i << " " << corner_2 << " " << corner_3 << std::endl;
@@ -202,14 +199,14 @@ int main()
                 vertices[i].color = Vector4uc(0,0,0,0);
             }
 		    else{
-		        int pixel_y = (i / (imgWidth - 1)) + 1;
-                int pixel_x = i - (pixel_y - 1) * imgWidth;
+		        int pixel_y = i / imgWidth;
+                int pixel_x = i - pixel_y * imgWidth;
                 float currDepthValue = depthMap[i];
 		        float camera_x = currDepthValue * ((float) pixel_x - cX) / fX;
                 float camera_y = currDepthValue * ((float) pixel_y - cY) / fY;
 
                 Vector4f camera_pos_vector = Vector4f(camera_x, camera_y, currDepthValue, (float) 1.0);
-                Vector4f world_pos = (trajectoryInv * depthExtrinsicsInv * camera_pos_vector).transpose();
+                Vector4f world_pos = trajectoryInv * depthExtrinsicsInv * camera_pos_vector;
 
                 unsigned char r = colorMap[4*i];
                 unsigned char g = colorMap[4*i+1];
