@@ -78,7 +78,9 @@ public:
 		Eigen::Vector3f n = m_pointcloud.GetNormals()[idx];
 
 		// TODO: implement the evaluation using Hoppe's method (see lecture slides)
-		return 0.0;
+		Vector3f temp = Vector3f(x.x() - p.x(), x.y() - p.y(), x.z() - p.z());
+        float sdf_value = temp.dot(n);
+		return sdf_value;
 	}
 
 private:
@@ -158,9 +160,15 @@ public:
 		// the centers of the RBFs are the first m_numCenters sample points (use m_funcSamp.m_pos[i] to access them)
 		// hint: Eigen provides a norm() function to compute the l2-norm of a vector (e.g. see macro phi(i,j))
 		double result = 0.0;
-
-
-		return result;
+        for(int i = 0; i < m_numCenters; i++){
+            result += m_coefficents[i] * EvalBasis((m_funcSamp.m_pos[i] - _x).norm());
+        }
+        Vector3d b_vector = Vector3d(m_coefficents[m_numCenters],
+                m_coefficents[m_numCenters+1], m_coefficents[m_numCenters+2]);
+        double d = m_coefficents[m_numCenters+3];
+        result += b_vector.dot(_x);
+        result += d;
+        return result;
 	}
 
 private:
@@ -185,14 +193,18 @@ private:
 		// you can access matrix elements using for example A(i,j) for the i-th row and j-th column
 		// similar you access the elements of the vector b, e.g. b(i) for the i-th element
 
+		for(unsigned int i = 0; i < 2 * m_numCenters; i++){
+            for(unsigned int j = 0; j < m_numCenters; j++){
+                A(i, j) = EvalBasis((m_funcSamp.m_pos[i] - m_funcSamp.m_pos[j]).norm());
+		        b(i) = m_funcSamp.m_val[i];
+            }
+		    A(i, m_numCenters) = m_funcSamp.m_pos[i].x();
+            A(i, m_numCenters+1) = m_funcSamp.m_pos[i].y();
+            A(i, m_numCenters+2) = m_funcSamp.m_pos[i].z();
+            A(i, m_numCenters+3) = 1;
+        }
 
-
-
-
-
-
-
-		// build the system matrix and the right hand side of the normal equation
+        // build the system matrix and the right hand side of the normal equation
 		m_systemMatrix = A.transpose() * A;
 		m_rhs = A.transpose() * b;
 
@@ -209,8 +221,7 @@ private:
 
 		FullPivLU<Matrix<double, Dynamic, Dynamic>> LU(m_systemMatrix);
 		m_coefficents = LU.solve(m_rhs);
-
-		std::cerr << "Done." << std::endl;
+        std::cerr << "Done." << std::endl;
 	}
 
 	// point cloud
