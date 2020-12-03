@@ -24,11 +24,11 @@ public:
 		// TODO: Compute the transformation matrix by using the computed rotation and translation.
 		// You can access parts of the matrix with .block(start_row, start_col, num_rows, num_cols) = elements
 		Matrix4f estimatedPose = Matrix4f::Identity();
-        int num_points = sourcePoints.size();
-        for(int i=0; i < num_points; i++){
-            estimatedPose.block(i, 0, 1, 3) = (rotation * sourcePoints[i] + (rotation * translation - rotation * targetMean + targetMean)).transpose();
-        }
-		return estimatedPose;
+
+        estimatedPose.block(0, 0, 3, 3) = rotation;
+        estimatedPose.block(0 , 3, 3, 1) = -rotation * sourceMean + translation + sourceMean;
+
+        return estimatedPose;
 	}
 
 private:
@@ -49,15 +49,15 @@ private:
 		// Important: The covariance matrices should contain mean-centered source/target points.
 		Matrix3f rotation = Matrix3f::Identity();
 
-		Eigen::Matrix<float, 4, 3> sourcePoints_zeroMean2 = Matrix<float, 4, 3>().setZero();
-		Eigen::Matrix<float, 4, 3> targetPoints_zeroMean2 = Matrix<float, 4, 3>().setZero();
+		Eigen::Matrix<float, 4, 3> sourcePoints_zeroMean = Matrix<float, 4, 3>().setZero();
+		Eigen::Matrix<float, 4, 3> targetPoints_zeroMean = Matrix<float, 4, 3>().setZero();
 
         int num_points = sourcePoints.size();
         for(int i = 0; i < num_points; i++){
-            sourcePoints_zeroMean2.row(i) = Vector3f(sourcePoints[i].x()-sourceMean.x(), sourcePoints[i].y()-sourceMean.y(), sourcePoints[i].z()-sourceMean.z());
-            targetPoints_zeroMean2.row(i) = Vector3f(targetPoints[i].x()-targetMean.x(), targetPoints[i].y()-targetMean.y(), targetPoints[i].z()-targetMean.z());
+            sourcePoints_zeroMean.row(i) = Vector3f(sourcePoints[i].x()-sourceMean.x(), sourcePoints[i].y()-sourceMean.y(), sourcePoints[i].z()-sourceMean.z());
+            targetPoints_zeroMean.row(i) = Vector3f(targetPoints[i].x()-targetMean.x(), targetPoints[i].y()-targetMean.y(), targetPoints[i].z()-targetMean.z());
         }
-        Matrix3f ccMatrix = targetPoints_zeroMean2.transpose() * sourcePoints_zeroMean2;
+        Matrix3f ccMatrix = targetPoints_zeroMean.transpose() * sourcePoints_zeroMean;
         JacobiSVD<Matrix3f> svd(ccMatrix, ComputeFullU | ComputeFullV);
         rotation = svd.matrixU() * svd.matrixV().transpose();
         return rotation;
