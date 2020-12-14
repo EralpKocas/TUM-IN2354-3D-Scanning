@@ -82,7 +82,12 @@ public:
 				}
 
 				// TODO: Compute the normals using central differences. 
-				normalsTmp[idx] = Vector3f(1, 1, 1); // Needs to be replaced.
+				//normalsTmp[idx] = Vector3f(1, 1, 1); // Needs to be replaced.
+                Vector3f part1 = pointsTmp[idx+1]-pointsTmp[idx-1];
+				Vector3f part2 = pointsTmp[idx + width] - pointsTmp[idx - width];
+				normalsTmp[idx] = Vector3f(part1[1] * part2[2] - part1[2] * part2[1],
+                                           part1[2] * part2[0] - part1[0] * part2[2],
+                                           part1[0] * part2[1] - part1[1] * part2[0]);
 				normalsTmp[idx].normalize();
 			}
 		}

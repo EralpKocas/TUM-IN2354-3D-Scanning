@@ -112,12 +112,18 @@ public:
 		// The resulting 3D residual should be stored in the residuals array. To apply the pose 
 		// increment (pose parameters) to the source point, you can use the PoseIncrement class.
 		// Important: Ceres automatically squares the cost function.
-        fillVector(m_sourcePoint, residuals);
-        poseIncrement.apply(residuals, residuals);
-		residuals[0] = T(ceres::sqrt(m_weight)) * (residuals[0] - T(m_targetPoint.x()));
-		residuals[1] = T(ceres::sqrt(m_weight)) * (residuals[1] - T(m_targetPoint.y()));
-		residuals[2] = T(ceres::sqrt(m_weight)) * (residuals[2] - T(m_targetPoint.z()));
+        T source_res[3] = {T(0), T(0), T(0)};
+        fillVector(m_sourcePoint, source_res);
 
+        T target_res[3] = {T(0), T(0), T(0)};
+        fillVector(m_targetPoint, target_res);
+
+        T pose_incremented[3] = {T(0), T(0), T(0)};
+        poseIncrement.apply(source_res, pose_incremented);
+
+        residuals[0] = T(ceres::sqrt(LAMBDA)) * T(ceres::sqrt(m_weight)) * (pose_incremented[0] - target_res[0]);
+		residuals[1] = T(ceres::sqrt(LAMBDA)) * T(ceres::sqrt(m_weight)) * (pose_incremented[1] - target_res[1]);
+		residuals[2] = T(ceres::sqrt(LAMBDA)) * T(ceres::sqrt(m_weight)) * (pose_incremented[2] - target_res[2]);
         return true;
 	}
 
@@ -154,11 +160,16 @@ public:
 		// Important: Ceres automatically squares the cost function.
 		T source_res[3] = {T(0), T(0), T(0)};
         fillVector(m_sourcePoint, source_res);
+
+        T target_res[3] = {T(0), T(0), T(0)};
+        fillVector(m_targetPoint, target_res);
+
         poseIncrement.apply(source_res, source_res);
-        T x_dist = T(m_targetNormal.x()) * (source_res[0] - T(m_targetPoint.x()));
-        T y_dist = T(m_targetNormal.y()) * (source_res[1] - T(m_targetPoint.y()));
-        T z_dist = T(m_targetNormal.z()) * (source_res[2] - T(m_targetPoint.z()));
-		residuals[0] = T(ceres::sqrt(m_weight)) * (x_dist + y_dist + z_dist);
+        T x_dist = T(m_targetNormal.x()) * (source_res[0] - target_res[0]);
+        T y_dist = T(m_targetNormal.y()) * (source_res[1] - target_res[1]);
+        T z_dist = T(m_targetNormal.z()) * (source_res[2] - target_res[2]);
+		//residuals[0] = T(ceres::sqrt(LAMBDA)) * T(ceres::sqrt(m_weight)) * ceres::sqrt(ceres::pow(x_dist, 2) + ceres::pow(y_dist, 2) + ceres::pow(z_dist, 2));
+		residuals[0] = T(ceres::sqrt(LAMBDA)) * T(ceres::sqrt(m_weight)) * (x_dist + y_dist + z_dist);
 		return true;
 	}
 
@@ -244,15 +255,16 @@ protected:
 				const auto& targetNormal = targetNormals[match.idx];
 
 				// TODO: Invalidate the match (set it to -1) if the angle between the normals is greater than 60
-				double source_mag = ceres::sqrt(pow(sourceNormal.x(), 2) + pow(sourceNormal.y(), 2) + pow(sourceNormal.z(), 2));
-				double target_mag = ceres::sqrt(pow(targetNormal.x(), 2) + pow(targetNormal.y(), 2) + pow(targetNormal.z(), 2));
 
-				double cos_similarity = sourceNormal.dot(targetNormal) / (source_mag * target_mag);
+                double source_mag = ceres::sqrt(ceres::pow(sourceNormal.x(), 2) + ceres::pow(sourceNormal.y(), 2) + ceres::pow(sourceNormal.z(), 2));
+				double target_mag = ceres::sqrt(ceres::pow(targetNormal.x(), 2) + ceres::pow(targetNormal.y(), 2) + ceres::pow(targetNormal.z(), 2));
+
+                double cos_similarity = sourceNormal.dot(targetNormal) / (source_mag * target_mag);
                 double arccos_rad = ceres::acos(cos_similarity);
                 double cos_degree = arccos_rad * 180 / M_PI;
                 if (cos_degree > 60){
                     match.idx = -1;
-				}
+                }
 			}
 		}
 	}
@@ -450,33 +462,74 @@ private:
 			const auto& n = targetNormals[i];
 
 			// TODO: Add the point-to-plane constraints to the system
-
-
+            float ai1 = n.z() * s.y() - n.y() * s.z();
+            float ai2 = n.x() * s.z() - n.z() * s.x();
+            float ai3 = n.y() * s.x() - n.x() - s.y();
+            float nix = n.x();
+            float niy = n.y();
+            float niz = n.z();
+			Matrix<float, 1, 6> curr_row;
+            curr_row << ai1, ai2, ai3, nix, niy, niz;
+            A.block(i*4, 0, 1, 6) = curr_row;
+            b[i*4] = n.x() * d.x() + n.y() * d.y() + n.z() * d.z() - n.x() * s.x() - n.y() * s.y() - n.z() * s.z();
 			// TODO: Add the point-to-point constraints to the system
-			
+            /*Matrix<float, 1, 6> curr_row_x;
+            curr_row_x << 0, -1, 1, 1, 0, 0;
+            Matrix<float, 1, 6> curr_row_y;
+            curr_row_y << 1, 0, -1, 0, 1, 0;
+            Matrix<float, 1, 6> curr_row_z;
+            curr_row_z << -1, 1, 0, 0, 0, 1;*/
 
+            Matrix<float, 1, 6> curr_row_x;
+            curr_row_x << 0, -n.z(), n.y(), n.x(), 0, 0;
+
+            Matrix<float, 1, 6> curr_row_y;
+            curr_row_y << n.z(), 0, -n.x(), 0, n.y(), 0;
+
+            Matrix<float, 1, 6> curr_row_z;
+            curr_row_z << -n.y(), n.x(), 0, 0, 0, n.z();
+
+            A.block(i*4 + 1, 0, 1, 6) = curr_row_x;
+            A.block(i*4 + 2, 0, 1, 6) = curr_row_y;
+            A.block(i*4 + 3, 0, 1, 6) = curr_row_z;
+
+            b[i*4 + 1] = n.x() * (d.x() - s.x());
+            b[i*4 + 2] = n.y() * (d.y() - s.y());
+            b[i*4 + 3] = n.z() * (d.z() - s.z());
+
+            /*b[i*4 + 1] = (d.x() - s.x());
+            b[i*4 + 2] = (d.y() - s.y());
+            b[i*4 + 3] = (d.z() - s.z());*/
 			// TODO: Optionally, apply a higher weight to point-to-plane correspondences
-			
-			
+
 		}
 
 		// TODO: Solve the system
 		VectorXf x(6);
+        x = (A.transpose() * A).inverse() * A.transpose() * b;
 
-		
-		float alpha = x(0), beta = x(1), gamma = x(2);
+        /*JacobiSVD<Matrix3f> svd(A, ComputeFullU | ComputeFullV);
+        const Matrix3f& U = svd.matrixU();
+        const Matrix3f& V = svd.matrixV();
+        V*svd.singularValues().head().inverse()*U.transpose();
+        x = (V * svd.singularValues().inverse() * U.transpose()) * b;
+        x = A.completeOrthogonalDecomposition().pseudoInverse() * b;
+        x = A.bdcSvd(ComputeThinU | ComputeThinV).solve(b);*/
 
-		// Build the pose matrix
+        float alpha = x(0), beta = x(1), gamma = x(2);
+
+        // Build the pose matrix
 		Matrix3f rotation = AngleAxisf(alpha, Vector3f::UnitX()).toRotationMatrix() *
 			                AngleAxisf(beta, Vector3f::UnitY()).toRotationMatrix() *
 			                AngleAxisf(gamma, Vector3f::UnitZ()).toRotationMatrix();
 
-		Vector3f translation = x.tail(3);
-        std::cout << "hey" << std::endl;
+        Vector3f translation = x.tail(3);
 
 		// TODO: Build the pose matrix using the rotation and translation matrices
 		Matrix4f estimatedPose = Matrix4f::Identity();
-        estimatedPose.block(0 , 3, 3, 1) = rotation * translation;
+
+        estimatedPose.block(0 , 0, 3, 3) = rotation;
+        estimatedPose.block(0 , 3, 3, 1) = translation;
 
 		return estimatedPose;
 	}
